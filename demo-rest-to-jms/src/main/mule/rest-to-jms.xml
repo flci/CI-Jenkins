@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls" xmlns:vm="http://www.mulesoft.org/schema/mule/vm"
+	xmlns:kafka="http://www.mulesoft.org/schema/mule/kafka"
+	xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/kafka http://www.mulesoft.org/schema/mule/kafka/current/mule-kafka.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="0db333a1-03da-4101-a640-23aab2cb1b4f" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<kafka:producer-config name="Apache_Kafka_Producer_configuration" doc:name="Apache Kafka Producer configuration" doc:id="70a5d2c0-faf0-465a-a572-19c9e252e7f7" >
+		<kafka:producer-plaintext-connection>
+			<kafka:bootstrap-servers >
+				<kafka:bootstrap-server value="localhost:9092" />
+			</kafka:bootstrap-servers>
+		</kafka:producer-plaintext-connection>
+	</kafka:producer-config>
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="2d4d3d8a-77cd-4453-97ba-72e070890192" >
+		<http:request-connection protocol="HTTPS" host="api.nasa.gov" />
+	</http:request-config>
+	<jms:config name="JMS_Config" doc:name="JMS Config" doc:id="1307e11c-b812-405a-83f0-4ba70b736d60" >
+		<jms:active-mq-connection username="admin" password="admin" >
+			<jms:factory-configuration brokerUrl="tcp://localhost:61616" />
+		</jms:active-mq-connection>
+	</jms:config>
+	<flow name="rest-to-jmsFlow" doc:id="7acb34ae-6df7-4977-ad25-f5baa190f558" >
+		<http:listener doc:name="Listener" doc:id="2d7252fa-e36d-4bea-af7e-eecfef01fe61" config-ref="HTTP_Listener_config" path="/testActiveMQ" allowedMethods="GET"/>
+		<http:request method="GET" doc:name="Request" doc:id="5ed70b1c-5c1d-4f81-a7f9-48d60153ecdc" config-ref="HTTP_Request_configuration" path="/insight_weather/">
+			<http:query-params ><![CDATA[#[output application/java
+---
+{
+	"api_key" : "jvUlGOseYcY87Dly8CM0FGrZ1yihuk7O6MfJUK4m",
+	"ver" : "1.0",
+	"feedtype" : "json"
+}]]]></http:query-params>
+		</http:request>
+		<logger level="INFO" doc:name="Logger" doc:id="8cac53e4-208d-4d2d-bb56-1c77c3cb2689" message='{"message": "The request has passed the NASA weather API"}'/>
+		<jms:publish doc:name="Publish to ActiveMQ" doc:id="104bf305-cd46-47a9-b93d-8caca14d8a4f" destination="testQueue" sendCorrelationId="ALWAYS" config-ref="JMS_Config"/>
+		<logger level="INFO" doc:name="Logger" doc:id="a17a74e9-acc5-488b-9ab7-8dffc14954a6" message='{"message": "The request has been persisted into the Apache MQ"}'/>
+	</flow>
+	<flow name="Copy_of_rest-to-jmsFlow" doc:id="a69b3041-9932-4645-ab02-476dd98501f3" >
+		<http:listener doc:name="Copy_of_Listener" doc:id="020bceaf-8344-4c24-ba04-2df643461932" config-ref="HTTP_Listener_config" path="/testKafka" allowedMethods="GET" />
+		<http:request method="GET" doc:name="Copy_of_Request" doc:id="af31fa7a-9e3f-4771-af70-553a0c49d66e" config-ref="HTTP_Request_configuration" path="/insight_weather/" >
+			<http:query-params ><![CDATA[#[output application/java
+---
+{
+	"api_key" : "jvUlGOseYcY87Dly8CM0FGrZ1yihuk7O6MfJUK4m",
+	"ver" : "1.0",
+	"feedtype" : "json"
+}]]]></http:query-params>
+		</http:request>
+		<logger level="INFO" doc:name="Copy_of_Logger" doc:id="b221779a-9da6-4a6f-8a3e-b0f7ec4b5341" message='{"message": "The request has passed the NASA weather API"}' />
+		<kafka:publish doc:name="Copy_of_Publish to Kafka" doc:id="20507c85-9abc-4337-9aa5-cd7e21ec2212" config-ref="Apache_Kafka_Producer_configuration" topic="test" />
+		<logger level="INFO" doc:name="Copy_of_Logger" doc:id="a267f043-748a-429f-8405-4e7f3b358c70" message='{"message": "The message has been persisted into Apache Kafka"}' />
+	</flow>
+</mule>
